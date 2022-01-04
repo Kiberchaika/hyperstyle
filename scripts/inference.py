@@ -18,10 +18,7 @@ from utils.inference_utils import run_inversion
 from utils.model_utils import load_model
 from options.test_options import TestOptions
 
-
-def run():
-    test_opts = TestOptions().parse()
-
+def test(test_opts):
     out_path_results = os.path.join(test_opts.exp_dir, 'inference_results')
     out_path_coupled = os.path.join(test_opts.exp_dir, 'inference_coupled')
 
@@ -103,6 +100,9 @@ def run():
     # save all latents as npy file
     np.save(os.path.join(test_opts.exp_dir, 'latents.npy'), all_latents)
 
-
+def run():
+    test_opts = TestOptions().parse()
+    test(test_opts)
+ 
 if __name__ == '__main__':
     run()

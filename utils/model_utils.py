@@ -8,6 +8,7 @@ from models.stylegan2.model import Generator
 from models.hyperstyle import HyperStyle
 from models.encoders.e4e import e4e
 
+import io
 
 def load_model(checkpoint_path, device='cuda', update_opts=None, is_restyle_encoder=False):
     ckpt = torch.load(checkpoint_path, map_location='cpu')

@@ -42,9 +42,13 @@ def get_landmark(filepath, predictor):
 	img = dlib.load_rgb_image(filepath)
 	dets = detector(img, 1)
 
+	shape = None
 	for k, d in enumerate(dets):
 		shape = predictor(img, d)
 
+	if shape is None:
+		return None
+     
 	t = list(shape.parts())
 	a = []
 	for tt in t:
@@ -60,6 +64,8 @@ def align_face(filepath, predictor):
 	"""
 
 	lm = get_landmark(filepath, predictor)
+	if lm is None:
+		return None
 
 	lm_chin = lm[0: 17]  # left-right
 	lm_eyebrow_left = lm[17: 22]  # left-right

@@ -15,10 +15,7 @@ from utils.common import tensor2im
 from utils.domain_adaptation_utils import run_domain_adaptation
 from utils.model_utils import load_model, load_generator
 
-
-def run():
-    test_opts = TestOptions().parse()
-
+def test(test_opts):
     out_path_results = os.path.join(test_opts.exp_dir, 'domain_adaptation_results')
     out_path_coupled = os.path.join(test_opts.exp_dir, 'domain_adaptation_coupled')
 
@@ -76,6 +73,11 @@ def run():
                                  axis=1)
             Image.fromarray(res).save(coupled_save_path)
             global_i += 1
+
+
+def run():
+    test_opts = TestOptions().parse()
+    test(test_opts)
 
 
 if __name__ == '__main__':
