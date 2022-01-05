@@ -15,7 +15,7 @@ from shutil import copyfile
 import threading
 
 from scripts.align_faces_parallel import align_face
-from scripts.run_domain_adaptation import test
+from scripts.run_domain_adaptation import test, DomainAdaptation
 from options.test_options import TestOptions
 import dlib
 from helpers import dotdict, current_milli_time, lock, Thread
@@ -40,7 +40,7 @@ async def test_api(response_class=HTMLResponse):
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
             html {
-                font-size: 18px;
+                font-size: 20px;
             }
         </style>    
     """
@@ -50,12 +50,12 @@ async def test_api(response_class=HTMLResponse):
         <body>
         <h2>Test API</h2><br/><br/>
         <div id="message" style="display:none;">wait...</div>
-        <form id="form" action=\"/add_task\" method=\"POST\" enctype=\"multipart/form-data\">
+        <form id="form" action=\"/process\" method=\"POST\" enctype=\"multipart/form-data\">
             
             Choose photo: <input type='file' id="file" name="photo" accept=".gif,.jpg,.jpeg,.png">
             <br/><br/>
             
-            <select name="checkpoint">{checkpoints_html_options}</select>
+            Style: <select name="checkpoint">{checkpoints_html_options}</select>
             <br/><br/>
 
             <input type="submit" value="Submit"/> 
@@ -74,8 +74,8 @@ async def test_api(response_class=HTMLResponse):
         </script>
     """)
 
-@app.post("/add_task")
-async def add_task(request: Request, photo: UploadFile = File(...), checkpoint: str = Form(""), response_class=HTMLResponse):
+@app.post("/process")
+async def process(request: Request, photo: UploadFile = File(...), checkpoint: str = Form(""), response_class=HTMLResponse):
     global settings, workers, tasks
 
     if photo != None:
@@ -101,6 +101,13 @@ async def add_task(request: Request, photo: UploadFile = File(...), checkpoint: 
                             image=image.rotate(90, expand=True)
 
                 photo_path = os.path.join("test_data", filename + ".png")
+ 
+                # resize with aspect
+                fixed_height = 1024
+                height_percent = (fixed_height / float(image.size[1]))
+                width_size = int((float(image.size[0]) * float(height_percent)))
+                face_img = image.resize((width_size, fixed_height))
+               
                 image.save(photo_path) # save uploaded photo
                 
                 predictor = dlib.shape_predictor("pretrained_models/shape_predictor_68_face_landmarks.dat")
@@ -115,28 +122,11 @@ async def add_task(request: Request, photo: UploadFile = File(...), checkpoint: 
                 #    os.remove(f)
 
                 '''
-                # resize with aspect
-                fixed_height = 512
-                height_percent = (fixed_height / float(face_img.size[1]))
-                width_size = int((float(face_img.size[0]) * float(height_percent)))
-                face_img = face_img.resize((width_size, fixed_height))
-                #face_img = face_img.resize((512,512))
-                '''
+                 '''
 
                 print("aligned")
 
-                opt = TestOptions().parse()  # get test options
-                opt.exp_dir = "experiment"
-                opt.checkpoint_path = "pretrained_models/hyperstyle_ffhq.pt"
-                opt.finetuned_generator_checkpoint_path = os.path.join(pretrained_models_path, checkpoint)
-                opt.data_path = "test_data/aligned"
-                opt.test_batch_size = 1
-                opt.test_workers = 0
-                opt.n_iters_per_batch = 2 
-                opt.load_w_encoder = True
-                opt.w_encoder_checkpoint_path = "pretrained_models/faces_w_encoder.pt"
-                opt.restyle_n_iterations = 2  
-                test(opt)
+                domainAdaptation.process(os.path.join(pretrained_models_path, checkpoint))
 
                 print("finished")
 
@@ -162,7 +152,25 @@ async def add_task(request: Request, photo: UploadFile = File(...), checkpoint: 
 def server():
     uvicorn.run(app, host=localhost, port=8080)
 
+
+domainAdaptation = None
+
 if __name__ == '__main__':
+    
+    opt = TestOptions().parse()  # get test options
+    opt.exp_dir = "experiment"
+    opt.checkpoint_path = "pretrained_models/hyperstyle_ffhq.pt"
+    opt.finetuned_generator_checkpoint_path = ""
+    opt.data_path = "test_data/aligned"
+    opt.test_batch_size = 1
+    opt.test_workers = 0
+    opt.n_iters_per_batch = 2 
+    opt.load_w_encoder = True
+    opt.w_encoder_checkpoint_path = "pretrained_models/faces_w_encoder.pt"
+    opt.restyle_n_iterations = 2  
+
+    domainAdaptation = DomainAdaptation(opt)
+
     server()
 
 # python web.py
