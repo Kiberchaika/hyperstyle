@@ -58,6 +58,9 @@ async def test_api(response_class=HTMLResponse):
             Style: <select name="checkpoint">{checkpoints_html_options}</select>
             <br/><br/>
 
+            Use all styles: <input type="checkbox" name="test_all">
+            <br/><br/>
+
             <input type="submit" value="Submit"/> 
         </form>
         </body>
@@ -75,7 +78,7 @@ async def test_api(response_class=HTMLResponse):
     """)
 
 @app.post("/process")
-async def process(request: Request, photo: UploadFile = File(...), checkpoint: str = Form(""), response_class=HTMLResponse):
+async def process(request: Request, photo: UploadFile = File(...), checkpoint: str = Form(""), test_all : bool = Form(False), response_class=HTMLResponse):
     global settings, workers, tasks
 
     if photo != None:
@@ -126,23 +129,50 @@ async def process(request: Request, photo: UploadFile = File(...), checkpoint: s
 
                 print("aligned")
 
-                domainAdaptation.process(os.path.join(pretrained_models_path, checkpoint))
+                if test_all:
+                    copyfile(photo_path, os.path.join("out", filename + "_orig.png"))
 
-                print("finished")
+                    html = []
 
-                copyfile(photo_path, os.path.join("out", filename + "_orig.png"))
-                copyfile("experiment/domain_adaptation_results/test.png", os.path.join("out", filename + "_processed.png"))
+                    for pretrained_model_path in sorted(glob.glob(os.path.join(pretrained_models_path, "*.pt"))):
+                        domainAdaptation.process(pretrained_model_path)
+                        name = os.path.basename(pretrained_model_path)
 
-                return(HTMLResponse(f"""
-                    <html><body>
-                    <table style="width: 100%">
-                    <tr>
-                    <td><img style="width:512px" src="{os.path.join("./", "out", filename + "_orig.png")}"></td>
-                    <td><img style="width:512px" src="{os.path.join("./", "out", filename + "_processed.png")}"></td>
-                    </tr>
-                    </table>
-                    </body></html>
-                """))
+                        copyfile("experiment/domain_adaptation_results/test.png", os.path.join("out", filename + "_" + name + "_processed.png"))
+                        html.append(
+                            f"""
+                            <div style="display: block; float: left; width: 256px; height: 300px;">{name}<br/><img style="width:256px" src="{os.path.join("./", "out", filename + "_" + name + "_processed.png")}"></div>
+                            """ )
+                        print("finished", name)
+
+                    print("finished")
+                    
+                    return(HTMLResponse(f"""
+                        <html><body>
+                        <div style="display: block; float: left; width: 256px; height: 300px;">&nbsp;<br/><img style="width:256px" src="{os.path.join("./", "out", filename + "_orig.png")}"></div>
+                        {"".join(html)}
+                        </body></html>
+                    """))
+                    
+                else:
+
+                    domainAdaptation.process(os.path.join(pretrained_models_path, checkpoint))
+
+                    print("finished")
+
+                    copyfile(photo_path, os.path.join("out", filename + "_orig.png"))
+                    copyfile("experiment/domain_adaptation_results/test.png", os.path.join("out", filename + "_processed.png"))
+
+                    return(HTMLResponse(f"""
+                        <html><body>
+                        <table style="width: 100%">
+                        <tr>
+                        <td><img style="width:512px" src="{os.path.join("./", "out", filename + "_orig.png")}"></td>
+                        <td><img style="width:512px" src="{os.path.join("./", "out", filename + "_processed.png")}"></td>
+                        </tr>
+                        </table>
+                        </body></html>
+                    """))
 
             except Exception as e:
                 return HTMLResponse("[ERROR] Image is not available or corrupted.<br/> " + str(e))

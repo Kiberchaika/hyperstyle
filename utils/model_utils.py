@@ -8,6 +8,7 @@ from models.stylegan2.model import Generator
 from models.hyperstyle import HyperStyle
 from models.encoders.e4e import e4e
 
+import collections
 import io
 
 def load_model(checkpoint_path, device='cuda', update_opts=None, is_restyle_encoder=False):
@@ -39,7 +40,21 @@ def load_generator(checkpoint_path, device='cuda'):
     print(f"Loading generator from checkpoint: {checkpoint_path}")
     generator = Generator(1024, 512, 8, channel_multiplier=2)
     ckpt = torch.load(checkpoint_path, map_location='cpu')
-    generator.load_state_dict(ckpt['g_ema'])
+ 
+    # fix for loading few shot gan checkpoint
+    if 'module.style.1.weight' in ckpt['g_ema']: 
+        d = collections.OrderedDict()
+        for key in ckpt['g_ema'].keys():
+            subkeys = key.split('.')
+            if subkeys[0] == 'module':
+                subkeys.pop(0) # remove module prefix
+                n_key  = '.'.join(subkeys)
+                d[n_key] = ckpt['g_ema'][key]
+        generator.load_state_dict(d)
+    else:
+        generator.load_state_dict(ckpt['g_ema'])
+        
+        
     generator.eval()
     generator.to(device)
     return generator

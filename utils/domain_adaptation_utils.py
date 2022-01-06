@@ -12,8 +12,9 @@ def run_domain_adaptation(inputs, net, opts, fine_tuned_generator, restyle_e4e, 
     y_hat2, _, weights_deltas, _ = run_inversion(inputs, net, opts)
     weights_deltas = filter_non_ffhq_layers_in_toonify_model(weights_deltas)
     
-    for idx in [11,12,13,12,15,16,17]:
-        latents[0][idx] += 0.75 * (torch.rand(512) * 2 - 1).to(latents.device)
+    # random
+    #for idx in [11,12,13,14,15,16,17]:
+    #    latents[0][idx] += 2.75 * (torch.rand(512) * 2 - 1).to(latents.device)
     
     return fine_tuned_generator([latents],
                                 input_is_latent=True,
