@@ -13,6 +13,7 @@ import platform
 import glob
 from shutil import copyfile
 import threading
+import json
 
 from scripts.align_faces_parallel import align_face
 from scripts.run_domain_adaptation import test, DomainAdaptation
@@ -45,6 +46,57 @@ async def test_api(response_class=HTMLResponse):
         </style>    
     """
     
+    html_script = """
+        const form = document.getElementById('form');
+        const message = document.getElementById('message');
+        const response = document.getElementById('response');
+
+
+        $('#form').submit(function(e) {
+
+            form.style.display = 'none';
+            message.style.display = '';
+            response.innerHTML = '';
+
+            $.ajax({
+                url: '/process',
+                timeout: 3600000,
+                type: 'POST',
+                data: new FormData(this),
+                processData: false,
+                contentType: false,
+                cache: false,
+                success: function(data) {
+                    const obj = JSON.parse(data);
+
+                    form.style.display = '';
+                    message.style.display = 'none';
+
+                    if (obj.hasOwnProperty('processed')) {
+                        var res =
+                            '<table style="width: 100%">' +
+                            '<tr>' +
+                            '<td><img style="width:512px" src="' + obj.orig + '"></td>' +
+                            '<td><img style="width:512px" src="' + obj.processed + '"></td>' +
+                            '</tr>' +
+                            '</table>';
+
+                        response.innerHTML = res;
+                    } else {
+                        var res = '';
+                        for (const [key, value] of Object.entries(obj)) {
+                            res += '<div style="display: block; float: left; width: 256px; height: 300px;">' + key + '<br/><img style="width:256px" src="' + value + '"></div>'
+                        }
+                        response.innerHTML = res;
+                    }
+
+                },
+            });
+
+            e.preventDefault();
+        });
+    """
+    
     return HTMLResponse(f"""
         {html_header}
         <body>
@@ -61,19 +113,14 @@ async def test_api(response_class=HTMLResponse):
             Use all styles: <input type="checkbox" name="test_all">
             <br/><br/>
 
-            <input type="submit" value="Submit"/> 
+            <input type="submit" name="submit" value="Submit"/> 
         </form>
+        <div id="response"></div>
         </body>
+        <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
         <script>
-        const form = document.getElementById('form');
-        const message = document.getElementById('message');
-
-        function submit(event) {{
-            form.style.display = 'none';
-            message.style.display = '';
-        }}
-
-        form.addEventListener('submit', submit);
+       {html_script}
+        
         </script>
     """)
 
@@ -116,7 +163,7 @@ async def process(request: Request, photo: UploadFile = File(...), checkpoint: s
                 predictor = dlib.shape_predictor("pretrained_models/shape_predictor_68_face_landmarks.dat")
                 face_img = align_face(photo_path, predictor)
                 if face_img is None:
-                    return HTMLResponse("[ERROR] Face not found")
+                    return HTMLResponse(json.dumps({"error": "Face not found"}))
                 
                 photo_path = os.path.join("test_data", "aligned", "test.png")
                 face_img.save(photo_path) # save aligned photo
@@ -132,20 +179,25 @@ async def process(request: Request, photo: UploadFile = File(...), checkpoint: s
                 if test_all:
                     copyfile(photo_path, os.path.join("out", filename + "_orig.png"))
 
-                    html = []
+                    results = {}
+                    results["orig"] = os.path.join("./", "out", filename + "_orig.png")
 
                     for pretrained_model_path in sorted(glob.glob(os.path.join(pretrained_models_path, "*.pt"))):
                         domainAdaptation.process(pretrained_model_path)
                         name = os.path.basename(pretrained_model_path)
 
                         copyfile("experiment/domain_adaptation_results/test.png", os.path.join("out", filename + "_" + name + "_processed.png"))
-                        html.append(
-                            f"""
-                            <div style="display: block; float: left; width: 256px; height: 300px;">{name}<br/><img style="width:256px" src="{os.path.join("./", "out", filename + "_" + name + "_processed.png")}"></div>
-                            """ )
+                        
+                        
+                        results[name] = os.path.join("./", "out", filename + "_" + name + "_processed.png")
+                        
                         print("finished", name)
 
-                    print("finished")
+                    print("finished all")
+                    print(results)
+
+
+                    return(HTMLResponse(json.dumps(results)))
                     
                     return(HTMLResponse(f"""
                         <html><body>
@@ -163,7 +215,13 @@ async def process(request: Request, photo: UploadFile = File(...), checkpoint: s
                     copyfile(photo_path, os.path.join("out", filename + "_orig.png"))
                     copyfile("experiment/domain_adaptation_results/test.png", os.path.join("out", filename + "_processed.png"))
 
-                    return(HTMLResponse(f"""
+                    return HTMLResponse(json.dumps({
+                        "orig" : os.path.join("./", "out", filename + "_orig.png"),
+                        "processed" : os.path.join("./", "out", filename + "_processed.png"),
+                    }))
+
+
+                    return HTMLResponse(f"""
                         <html><body>
                         <table style="width: 100%">
                         <tr>
@@ -172,10 +230,10 @@ async def process(request: Request, photo: UploadFile = File(...), checkpoint: s
                         </tr>
                         </table>
                         </body></html>
-                    """))
+                    """)
 
             except Exception as e:
-                return HTMLResponse("[ERROR] Image is not available or corrupted.<br/> " + str(e))
+                return HTMLResponse(json.dumps({"error": "Image is not available or corrupted. " + str(e)}))
 
     return HTMLResponse("")
 
