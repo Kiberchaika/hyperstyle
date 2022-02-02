@@ -20,6 +20,7 @@ from scripts.run_domain_adaptation import test, DomainAdaptation
 from options.test_options import TestOptions
 import dlib
 from helpers import dotdict, current_milli_time, lock, Thread
+import asyncio
 
 # server app
 app = FastAPI()
@@ -124,116 +125,127 @@ async def test_api(response_class=HTMLResponse):
         </script>
     """)
 
+
+completed = True
+def inference(pretrained_model_path: str = ""):
+    global completed
+    domainAdaptation.process(pretrained_model_path)
+    completed = True
+
+processing = False
+
 @app.post("/process")
 async def process(request: Request, photo: UploadFile = File(...), checkpoint: str = Form(""), test_all : bool = Form(False), response_class=HTMLResponse):
     global settings, workers, tasks
+    global completed, processing
 
     if photo != None:
-        with lock:
-            try:
-                filename = str(current_milli_time())
+        while processing == True:
+            await asyncio.sleep(2)
+        processing = True
+        
+        try:
+            filename = str(current_milli_time())
 
-                image = Image.open(photo.file._file) 
+            image = Image.open(photo.file._file) 
 
-                # fixed rotation from exif
-                for orientation in ExifTags.TAGS.keys():
-                    if ExifTags.TAGS[orientation]=='Orientation':
-                        break
-                
-                if image._exif != None:
-                    exif = image._getexif()
-                    if orientation in exif:
-                        if exif[orientation] == 3:
-                            image=image.rotate(180, expand=True)
-                        elif exif[orientation] == 6:
-                            image=image.rotate(270, expand=True)
-                        elif exif[orientation] == 8:
-                            image=image.rotate(90, expand=True)
+            # fixed rotation from exif
+            for orientation in ExifTags.TAGS.keys():
+                if ExifTags.TAGS[orientation]=='Orientation':
+                    break
+            
+            if image._exif != None:
+                exif = image._getexif()
+                if orientation in exif:
+                    if exif[orientation] == 3:
+                        image=image.rotate(180, expand=True)
+                    elif exif[orientation] == 6:
+                        image=image.rotate(270, expand=True)
+                    elif exif[orientation] == 8:
+                        image=image.rotate(90, expand=True)
 
-                photo_path = os.path.join("test_data", filename + ".png")
- 
-                # resize with aspect
-                fixed_height = 1024
-                height_percent = (fixed_height / float(image.size[1]))
-                width_size = int((float(image.size[0]) * float(height_percent)))
-                face_img = image.resize((width_size, fixed_height))
-               
-                image.save(photo_path) # save uploaded photo
-                
-                predictor = dlib.shape_predictor("pretrained_models/shape_predictor_68_face_landmarks.dat")
-                face_img = align_face(photo_path, predictor)
-                if face_img is None:
-                    return HTMLResponse(json.dumps({"error": "Face not found"}))
-                
-                photo_path = os.path.join("test_data", "aligned", "test.png")
-                face_img.save(photo_path) # save aligned photo
+            photo_path = os.path.join("test_data", filename + ".png")
 
-                #for f in glob.glob('./test/*'):
-                #    os.remove(f)
+            # resize with aspect
+            fixed_height = 1024
+            height_percent = (fixed_height / float(image.size[1]))
+            width_size = int((float(image.size[0]) * float(height_percent)))
+            face_img = image.resize((width_size, fixed_height))
+            
+            image.save(photo_path) # save uploaded photo
+            
+            predictor = dlib.shape_predictor("pretrained_models/shape_predictor_68_face_landmarks.dat")
+            face_img = align_face(photo_path, predictor)
+            if face_img is None:
+                return HTMLResponse(json.dumps({"error": "Face not found"}))
+            
+            photo_path = os.path.join("test_data", "aligned", "test.png")
+            face_img.save(photo_path) # save aligned photo
 
-                '''
-                 '''
+            #for f in glob.glob('./test/*'):
+            #    os.remove(f)
 
-                print("aligned")
+            '''
+            '''
 
-                if test_all:
-                    copyfile(photo_path, os.path.join("out", filename + "_orig.png"))
+            print("aligned")
 
-                    results = {}
-                    results["orig"] = os.path.join("./", "out", filename + "_orig.png")
+            if test_all:
+                copyfile(photo_path, os.path.join("out", filename + "_orig.png"))
 
-                    for pretrained_model_path in sorted(glob.glob(os.path.join(pretrained_models_path, "*.pt"))):
-                        domainAdaptation.process(pretrained_model_path)
-                        name = os.path.basename(pretrained_model_path)
+                results = {}
+                results["orig"] = os.path.join("./", "out", filename + "_orig.png")
 
-                        copyfile("experiment/domain_adaptation_results/test.png", os.path.join("out", filename + "_" + name + "_processed.png"))
-                        
-                        
-                        results[name] = os.path.join("./", "out", filename + "_" + name + "_processed.png")
-                        
-                        print("finished", name)
-
-                    print("finished all")
-                    print(results)
-
-
-                    return(HTMLResponse(json.dumps(results)))
+                for pretrained_model_path in sorted(glob.glob(os.path.join(pretrained_models_path, "*.pt"))):
                     
-                    return(HTMLResponse(f"""
-                        <html><body>
-                        <div style="display: block; float: left; width: 256px; height: 300px;">&nbsp;<br/><img style="width:256px" src="{os.path.join("./", "out", filename + "_orig.png")}"></div>
-                        {"".join(html)}
-                        </body></html>
-                    """))
+                    completed = False
+                    while completed == False:
+                        Thread(inference, pretrained_model_path)
+                        await asyncio.sleep(2)
+
+                    name = os.path.basename(pretrained_model_path)
+
+                    copyfile("experiment/domain_adaptation_results/test.png", os.path.join("out", filename + "_" + name + "_processed.png"))
                     
-                else:
+                    
+                    results[name] = os.path.join("./", "out", filename + "_" + name + "_processed.png")
+                    
+                    print("finished", name)
 
-                    domainAdaptation.process(os.path.join(pretrained_models_path, checkpoint))
+                print("finished all")
+                print(results)
 
-                    print("finished")
+                processing = False
+                return(HTMLResponse(json.dumps(results)))
+                
+                return(HTMLResponse(f"""
+                    <html><body>
+                    <div style="display: block; float: left; width: 256px; height: 300px;">&nbsp;<br/><img style="width:256px" src="{os.path.join("./", "out", filename + "_orig.png")}"></div>
+                    {"".join(html)}
+                    </body></html>
+                """))
+                
+            else:
 
-                    copyfile(photo_path, os.path.join("out", filename + "_orig.png"))
-                    copyfile("experiment/domain_adaptation_results/test.png", os.path.join("out", filename + "_processed.png"))
+                completed = False
+                while completed == False:
+                    Thread(inference, os.path.join(pretrained_models_path, checkpoint))
+                    await asyncio.sleep(2)
 
-                    return HTMLResponse(json.dumps({
-                        "orig" : os.path.join("./", "out", filename + "_orig.png"),
-                        "processed" : os.path.join("./", "out", filename + "_processed.png"),
-                    }))
+                print("finished")
 
+                copyfile(photo_path, os.path.join("out", filename + "_orig.png"))
+                copyfile("experiment/domain_adaptation_results/test.png", os.path.join("out", filename + "_processed.png"))
 
-                    return HTMLResponse(f"""
-                        <html><body>
-                        <table style="width: 100%">
-                        <tr>
-                        <td><img style="width:512px" src="{os.path.join("./", "out", filename + "_orig.png")}"></td>
-                        <td><img style="width:512px" src="{os.path.join("./", "out", filename + "_processed.png")}"></td>
-                        </tr>
-                        </table>
-                        </body></html>
-                    """)
+                processing = False
+                return HTMLResponse(json.dumps({
+                    "orig" : os.path.join("./", "out", filename + "_orig.png"),
+                    "processed" : os.path.join("./", "out", filename + "_processed.png"),
+                }))
 
-            except Exception as e:
-                return HTMLResponse(json.dumps({"error": "Image is not available or corrupted. " + str(e)}))
+        except Exception as e:
+            processing = False
+            return HTMLResponse(json.dumps({"error": "Image is not available or corrupted. " + str(e)}))
 
     return HTMLResponse("")
 
