@@ -199,8 +199,8 @@ async def process(request: Request, photo: UploadFile = File(...), checkpoint: s
                 for pretrained_model_path in sorted(glob.glob(os.path.join(pretrained_models_path, "*.pt"))):
                     
                     completed = False
+                    Thread(inference, pretrained_model_path)
                     while completed == False:
-                        Thread(inference, pretrained_model_path)
                         await asyncio.sleep(2)
 
                     name = os.path.basename(pretrained_model_path)
@@ -228,8 +228,8 @@ async def process(request: Request, photo: UploadFile = File(...), checkpoint: s
             else:
 
                 completed = False
+                Thread(inference, os.path.join(pretrained_models_path, checkpoint))
                 while completed == False:
-                    Thread(inference, os.path.join(pretrained_models_path, checkpoint))
                     await asyncio.sleep(2)
 
                 print("finished")
