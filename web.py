@@ -275,9 +275,9 @@ if __name__ == '__main__':
     opt.w_encoder_checkpoint_path = "pretrained_models/faces_w_encoder.pt"
     opt.restyle_n_iterations = 2  
 
+    u2net = U2NETHelper.U2NETHelper()
+
     domainAdaptation = DomainAdaptation(opt)
-    
-    u2net = U2NETHelper()
 
     server()
 

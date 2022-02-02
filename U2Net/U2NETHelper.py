@@ -11,16 +11,16 @@ import numpy as np
 from PIL import Image
 from pathlib import Path
 
-from U2Net.data_loader import RescaleT
-from U2Net.data_loader import ToTensor
-from U2Net.data_loader import ToTensorLab
-from U2Net.data_loader import SalObjDataset
+from .data_loader import RescaleT
+from .data_loader import ToTensor
+from .data_loader import ToTensorLab
+from .data_loader import SalObjDataset
 
-from U2Net.model import U2NET 
+from .model import U2NET 
 
 class U2NETHelper:
     def __init__(self):
-        model_dir = './saved_models/u2net/u2net.pth'
+        model_dir = 'U2Net/saved_models/u2net/u2net.pth'
         self.net = U2NET(3,1)
         self.net.load_state_dict(torch.load(model_dir))
         if torch.cuda.is_available():
@@ -69,7 +69,7 @@ class U2NETHelper:
         for _, data_test in enumerate(test_salobj_dataloader):
 
             inputs_test = data_test['image']
-            print(inputs_test )
+            #print(inputs_test )
             inputs_test = inputs_test.type(torch.FloatTensor)
 
             if torch.cuda.is_available():
