@@ -22,6 +22,8 @@ import dlib
 from helpers import dotdict, current_milli_time, lock, Thread
 import asyncio
 
+from U2Net import U2NETHelper
+
 # server app
 app = FastAPI()
 app.mount("/out", StaticFiles(directory="out"), name="out")
@@ -130,6 +132,7 @@ completed = True
 def inference(pretrained_model_path: str = ""):
     global completed
     domainAdaptation.process(pretrained_model_path)
+    u2net.test("experiment/domain_adaptation_results/test.png", "experiment/domain_adaptation_results/test.png")
     completed = True
 
 processing = False
@@ -255,6 +258,9 @@ def server():
 
 domainAdaptation = None
 
+u2net = None
+ 
+
 if __name__ == '__main__':
     
     opt = TestOptions().parse()  # get test options
@@ -270,6 +276,8 @@ if __name__ == '__main__':
     opt.restyle_n_iterations = 2  
 
     domainAdaptation = DomainAdaptation(opt)
+    
+    u2net = U2NETHelper()
 
     server()
 
