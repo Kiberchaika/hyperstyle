@@ -180,6 +180,7 @@ async def process(request: Request, photo: UploadFile = File(...), checkpoint: s
             predictor = dlib.shape_predictor("pretrained_models/shape_predictor_68_face_landmarks.dat")
             face_img = align_face(photo_path, predictor)
             if face_img is None:
+                processing = False
                 return HTMLResponse(json.dumps({"error": "Face not found"}))
             
             photo_path = os.path.join("test_data", "aligned", "test.png")
