@@ -116,6 +116,9 @@ async def test_api(response_class=HTMLResponse):
             Use all styles: <input type="checkbox" name="test_all">
             <br/><br/>
 
+            Remove background: <input type="checkbox" name="remove_bg">
+            <br/><br/>
+
             <input type="submit" name="submit" value="Submit"/> 
         </form>
         <div id="response"></div>
@@ -129,16 +132,17 @@ async def test_api(response_class=HTMLResponse):
 
 
 completed = True
-def inference(pretrained_model_path: str = ""):
+def inference(pretrained_model_path: str = "", remove_bg: bool = False):
     global completed
     domainAdaptation.process(pretrained_model_path)
-    u2net.test("experiment/domain_adaptation_results/test.png", "experiment/domain_adaptation_results/test.png")
+    if remove_bg:
+        u2net.test("experiment/domain_adaptation_results/test.png", "experiment/domain_adaptation_results/test.png")
     completed = True
 
 processing = False
 
 @app.post("/process")
-async def process(request: Request, photo: UploadFile = File(...), checkpoint: str = Form(""), test_all : bool = Form(False), response_class=HTMLResponse):
+async def process(request: Request, photo: UploadFile = File(...), checkpoint: str = Form(""), test_all : bool = Form(False), remove_bg : bool = Form(False), response_class=HTMLResponse):
     global settings, workers, tasks
     global completed, processing
 
@@ -203,7 +207,7 @@ async def process(request: Request, photo: UploadFile = File(...), checkpoint: s
                 for pretrained_model_path in sorted(glob.glob(os.path.join(pretrained_models_path, "*.pt"))):
                     
                     completed = False
-                    Thread(inference, pretrained_model_path)
+                    Thread(inference, pretrained_model_path, remove_bg)
                     while completed == False:
                         await asyncio.sleep(2)
 
@@ -232,7 +236,7 @@ async def process(request: Request, photo: UploadFile = File(...), checkpoint: s
             else:
 
                 completed = False
-                Thread(inference, os.path.join(pretrained_models_path, checkpoint))
+                Thread(inference, os.path.join(pretrained_models_path, checkpoint), remove_bg)
                 while completed == False:
                     await asyncio.sleep(2)
 
